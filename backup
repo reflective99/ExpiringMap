@@ -1,0 +1,56 @@
+private class DLinkListNode {
+		private K key;
+		private V value;
+		private DLinkListNode next;
+		private DLinkListNode prev;
+		private long lastAccessedTime;
+
+		public DLinkListNode(){
+		}
+
+		public DLinkListNode(K key, V value){
+			this.key = key;
+			this.value = value;
+			this.lastAccessedTime = System.currentTimeMillis();
+		}
+
+		public long getLastAccessedTime() {
+			return this.lastAccessedTime;
+		}
+
+		public void setLastAccessedTime(long newTime) {
+			this.lastAccessedTime = newTime;
+		}
+
+		public void setNext(DLinkListNode node) {
+			this.next = node;
+		}
+
+		public void setPrev(DLinkListNode node) {
+			this.prev = node;
+		}
+
+		public K getKey() {
+			return key;
+		}
+
+		public void setKey(K key) {
+			this.key = key;
+		}
+
+		public V getValue() {
+			return value;
+		}
+
+		public void setValue(V value) {
+			this.value = value;
+		}
+
+		public DLinkListNode getPrev() {
+			return this.prev;
+		}
+
+		public DLinkListNode getNext() {
+			return this.next;
+		}
+	}

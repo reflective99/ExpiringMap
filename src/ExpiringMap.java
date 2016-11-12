@@ -31,11 +31,11 @@ import org.slf4j.LoggerFactory;
  * @param <V>
  */
 public class ExpiringMap<K, V> implements Map<K, V> {
-	
+
 	/**
 	 * 
 	 * @author Asim
-	 * EntryLinkedHashMap class extends the existing HashMap class
+	 * EntryHashMap class extends the existing HashMap class
 	 * It is used to internally store the Keys added to the ExpiringMap.
 	 * It uses a SortedSet to keep the entries in sorted order 
 	 * according to how much time has been elapsed since they were entered.
@@ -44,10 +44,10 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 	 * @param <V>
 	 */
 
-	private static class EntryLinkedHashMap<K, V> extends HashMap<K, EntryNode<K, V>> {
+	private static class EntryHashMap<K, V> extends HashMap<K, EntryNode<K, V>> {
 
 		private static final long serialVersionUID = 1L;
-		
+
 		/** A SortedSet to keep the Entries in a sorted order for fast eviction */
 		SortedSet<EntryNode<K, V>> sortedSet = new TreeSet<EntryNode<K, V>>();
 
@@ -56,16 +56,26 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 			super.clear();
 			sortedSet.clear();
 		}
-		
+
 		@Override 
 		public boolean containsValue(Object value) {
 			for(EntryNode<K, V> entry : values()) {
-				V val = entry.value;
+				V val = entry.getValue();
 				if(val != null && value.equals(val)){
 					return true;
 				}
 			}
 			return false;
+		}
+
+		public EntryNode<K, V> getEntireEntry(Object value) {
+			for(EntryNode<K, V> entry : values()) {
+				V val = entry.getValue();
+				if(val != null && value.equals(val)){
+					return entry;
+				}
+			}
+			return null;
 		}
 
 		@Override 
@@ -80,18 +90,17 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 			if(node != null) sortedSet.remove(node);
 			return node;
 		}
-		
+
 		/** 
-		 * @author Asim
 		 * This abstract class provides a blueprint for an Iterator Object 
 		 * that can be extended by any subclasses to Iterate over both Keys
 		 * and Values
 		 */
-		abstract class SimpleIterator {
-			
+		abstract class AbstractIterator {
+
 			private Iterator<EntryNode<K, V>> iterator = sortedSet.iterator();
-			
-			/** Implementation of SimpleIterator keeps track of the next element in the sorted set after retrieving an item */
+
+			/** Implementation of AbstractIterator keeps track of the next element in the sorted set after retrieving an item */
 			protected EntryNode<K, V> next;
 
 			public boolean hasNext() {
@@ -102,10 +111,10 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 				next = iterator.next();
 				return next;
 			}
-			
+
 		}
 
-		final class ValueIterator extends SimpleIterator implements Iterator<V> {
+		final class ValueIterator extends AbstractIterator implements Iterator<V> {
 
 			@Override
 			public final V next() {
@@ -114,14 +123,14 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 
 		}
 
-		final class KeyIterator extends SimpleIterator implements Iterator<K> {
+		final class KeyIterator extends AbstractIterator implements Iterator<K> {
 			public final K next() {
 				return getNext().key;
 			}
 		}
 
-		final class EntryNodeIterator extends SimpleIterator implements Iterator<Map.Entry<K, V>> {
-			
+		final class EntryNodeIterator extends AbstractIterator implements Iterator<Map.Entry<K, V>> {
+
 			public final Map.Entry<K, V> next() {
 				EntryNode<K, V> entry = getNext();
 				return new Map.Entry<K, V>() {
@@ -142,13 +151,121 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 				};
 
 			}
-			
+
 		}
-
-
 
 	}
 	
+	/**
+	 * This class provides the blueprints for the EntryNode Objects
+	 * These objects contain the entries as a bundle of Key and Values
+	 * entered into the ExpiringMap. The keys in the internalMap map
+	 * to these EntryNodes. They also keep track of the time that 
+	 * an entry was accessed last.
+	 * 
+	 * @author Asim
+	 * 
+	 * @param <K>
+	 * @param <V>
+	 */
+	static class EntryNode<K, V> implements Comparable<EntryNode<K, V>> {
+		
+		/** Time this entry was last accessed */
+		long lastAccessedTime;
+		K key;
+		V value;
+
+		/** Constructor for the new EntryNode Object 
+		 * 
+		 * @param key 
+		 * @param value
+		 * @param last time the entry was accessed
+		 */
+		public EntryNode(K key, V value){
+			this.key = key;
+			this.value = value;
+			this.lastAccessedTime = System.currentTimeMillis();
+		}
+
+		public EntryNode() {
+			this.lastAccessedTime = Long.MIN_VALUE;
+		}
+
+		public synchronized long getLastAccessedTime() {
+			return this.lastAccessedTime;
+		}
+
+		/** Changes the time this entry was last accessed */
+		public synchronized void setLastAccessedTime(long newTime) {
+			this.lastAccessedTime = newTime;
+		}
+
+		/** Gets the value for this entry */
+		public synchronized V getValue() {
+			return value;
+		}
+
+		/** Set the value for this entry */
+		public synchronized void setValue(V value) {
+			this.value = value;
+		}
+
+		/** Get the key for this entry 
+		 * @return */
+		public synchronized K getKey() {
+			return this.key;
+		}
+
+		@Override
+		public int compareTo(EntryNode<K, V> o) {
+			if(key.equals(o.key)) return 0;
+			if(lastAccessedTime < o.lastAccessedTime) {
+				return -1;
+			} else {
+				return 1;
+			}
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			
+			if(this == obj) {
+				return true;
+			} else if (obj == null) {
+				return false;
+			} else if (this.getClass() != obj.getClass()){
+				return false;
+			}
+			
+			EntryNode<?, ?> other = (EntryNode<?, ?>) obj;
+			if(!this.key.equals(other.getKey())) {
+				return false;
+			} else if (this.value == null) {
+				if(other.getValue() != null) return false;
+			} else if (!this.value.equals(other.getValue())) {
+				return false;
+			}
+			return true;
+			
+		}
+
+		@Override
+		public int hashCode() {
+			int bigPrime = 51;
+			int hash = 1;
+			hash = bigPrime * hash + ((key == null) ? 0 : key.hashCode());
+			hash = bigPrime * hash + ((value == null) ? 0 : value.hashCode());
+			return hash;
+		}
+
+		@Override
+		public String toString() {
+			return value.toString();
+		}
+
+	}
+
+
 	/** Instantiating the locks that will be used by the methods in ExpiringMap class */
 	private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 	private final Lock readLock = readWriteLock.readLock();
@@ -156,25 +273,25 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 
 	/** Time To Live for each each Entry as specified by the User */
 	private long myTimeToLiveInMillis;
-	
-	/** The internal EntryLinkedHashMap that keeps track of all the entries contained in the ExpiringMap so far*/
-	EntryLinkedHashMap<K, V> myInternalMap;
-	
+
+	/** The internal EntryHashMap that keeps track of all the entries contained in the ExpiringMap so far*/
+	EntryHashMap<K, V> myInternalMap;
+
 	/** */
 	private Thread evictorThread = null;
-	
+
 	/**
 	 * Constructor for Expiring Map which creates a new Evictor thread 
 	 * @param timeToLiveInMillis
 	 * @throws NullPointerException
 	 */
-	
+
 	private class Evictor extends Thread {
-		
+
 		private long timeToLive;
-		
+
 		private final Logger LOGGER = LoggerFactory.getLogger(Evictor.class);
-		
+
 		Evictor(long ttl){
 			this.timeToLive = ttl;
 		}
@@ -195,8 +312,8 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 			}
 		}
 	}
-	
-	
+
+
 	public ExpiringMap(long timeToLiveInMillis) throws NullPointerException {
 
 		if(timeToLiveInMillis < 0){
@@ -204,12 +321,12 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 		}
 
 		this.myTimeToLiveInMillis = timeToLiveInMillis;
-		this.myInternalMap = new EntryLinkedHashMap<K, V>();
-		// Run a new thread to clean up the entries which have expired
+		this.myInternalMap = new EntryHashMap<K, V>();
+		/** Run a new thread to clean up the entries which have expired */
 		if(this.myTimeToLiveInMillis > 0) {
-			
+
 			intitialize();
-			
+
 			/*
 			this.timer = new Timer();
 			timer.scheduleAtFixedRate(new TimerTask() {
@@ -233,88 +350,133 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 			});
 			evictor.setDaemon(true);
 			evictor.start();
-			*/
+			 */
 		}
 	}
-	
+
+	/**
+	 * This method initializes the Evictor Thread
+	 */
 	private void intitialize() {
 		new Evictor(this.myTimeToLiveInMillis).start();
 	}
 
 	/**
-	 * This function is called at regular intervals 
-	 * as specified by the time to live in milliseconds
-	 * It goes through all of the entries in ExpiringMap's
-	 * internalMap and evicts those which have expired.
+	 * This functions evicts the expired entries from the 
+	 * internal map. It is called at regular intervals 
+	 * by the evictor thread as specified by the 
+	 * time to live in milliseconds provided by the User.
 	 */
 	private void evictEntries() {
-			if(myInternalMap.size() == 0){
-				return;
-			}
-			writeLock.lock();
-			try {
-				List<K> keys = new ArrayList<K>();
-				for(EntryNode<K, V> node : myInternalMap.sortedSet) {
-					if(System.currentTimeMillis() - node.lastAccessedTime > this.myTimeToLiveInMillis) {
-						keys.add(node.getKey());
-					}
+		if(myInternalMap.size() == 0){
+			return;
+		}
+		writeLock.lock();
+		try {
+			List<K> keys = new ArrayList<K>();
+			for(EntryNode<K, V> node : myInternalMap.sortedSet) {
+				if(System.currentTimeMillis() - node.lastAccessedTime > this.myTimeToLiveInMillis) {
+					keys.add(node.getKey());
 				}
-				for(K key : keys){
-					remove(key);
-				}
-			} finally {
-				writeLock.unlock();
 			}
-			
+			for(K key : keys){
+				remove(key);
+			}
+		} finally {
+			writeLock.unlock();
+		}
+
 	}
 
+	/**
+	 * Returns the current size of the Expiring Map
+	 */
 	@Override
 	public int size() {
-		synchronized(this.myInternalMap) {
+		readLock.lock();
+		try {
 			return this.myInternalMap.size();
+		} finally {
+			readLock.unlock();
 		}
 	}
 
+	/**
+	 * Returns whether the Expiring Map has any entries
+	 */
 	@Override
 	public boolean isEmpty() {
-		synchronized(this.myInternalMap) {
+		readLock.lock();
+		try {
 			return this.myInternalMap.isEmpty();
+		} finally {
+			readLock.unlock();
 		}
 	}
 
+	/**
+	 * Returns true if the Expiring Map contains the key 
+	 * and updates the entry's last access time
+	 */
 	@Override
 	public boolean containsKey(Object key) {
 		readLock.lock();
 		try {
-			return myInternalMap.containsKey(key);
+			EntryNode<K, V> node = myInternalMap.get(key);
+			/** Update the last time accessed for this entry if found*/
+			if(node != null) {
+				handleNewAccess(node);
+				return true;
+			}
+			return false;
 		} finally {
 			readLock.unlock();
 		}
 	}
 
+	/**
+	 * Returns a true if the ExpiringMap contains the specified value
+	 * and updates the entry's last access time 
+	 */
 	@Override
 	public boolean containsValue(Object value) {
 		readLock.lock();
 		try {
-			return myInternalMap.containsValue(value);
+			EntryNode<K, V> node = myInternalMap.getEntireEntry(value);
+			/** Update the last time accessed for this entry if found*/
+			if(node != null) {
+				handleNewAccess(node);
+				return true;
+			}
+			return false;
 		} finally {
 			readLock.unlock();
 		}
 	}
 
-	@SuppressWarnings("null")
+	/**
+	 * Returns the Value corresponding to the Key specified
+	 * Also updates the last access time for an entry
+	 */
 	@Override
 	public V get(Object key) {
-
-		EntryNode<K, V> node = getNode(key);
-		if(node != null) {
-			handleNewAccess(node);
+		readLock.lock();
+		try {
+			EntryNode<K, V> node = getNode(key);
+			if(node != null) {
+				handleNewAccess(node);
+			}
 			return node == null ? null : node.getValue();
+		} finally {
+			readLock.unlock();
 		}
-		return node == null ? null : node.getValue();
-
 	}
 
+	/**
+	 * Returns the EntryNode corresponding to the Key specified
+	 * @param key
+	 * @return
+	 */
 	private EntryNode<K, V> getNode(Object key) {
 		readLock.lock();
 		try {
@@ -324,6 +486,7 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 		}
 	}
 
+	@SuppressWarnings("unused")
 	private EntryNode<K, V> removeNode(Object key) {
 		writeLock.lock();
 		try {
@@ -333,14 +496,12 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 		}
 	}
 
+	/**
+	 * Updates the last time accessed for an entry
+	 * @param node
+	 */
 	private void handleNewAccess(EntryNode<K, V> node) {
-		long timeElapsed = node.getLastAccessedTime();
-		long currentTime = System.currentTimeMillis();
-		if(currentTime - timeElapsed > this.myTimeToLiveInMillis){
-			removeNode(node);
-		} else {
-			node.setLastAccessedTime(System.currentTimeMillis());
-		}
+		node.setLastAccessedTime(System.currentTimeMillis());
 	}
 
 	@Override
@@ -348,16 +509,27 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 		return putInMap(key, value);
 	}
 
+	/**
+	 * This function puts the Key and EntryNode into
+	 * the internal map. It also checks if the 
+	 * internal map already contains the key, and 
+	 * then updates the corresponding value accordingly
+	 * @param key
+	 * @param value
+	 * @return
+	 */
 	private V putInMap(K key, V value) {
 		writeLock.lock();
 		try {
 			EntryNode<K, V> node = getNode(key);
+			/** Create a new Node if it's a new key */
 			if(node == null) {
 				node = new EntryNode<K, V>(key, value);
 				myInternalMap.put(key, node);
 			} else {
+				/** Update the value and last access time for the key */
 				node.setValue(value);
-				node.setLastAccessedTime(System.currentTimeMillis());
+				handleNewAccess(node);
 			}
 			return node.getValue();
 		} finally {
@@ -379,13 +551,10 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 				//System.out.println("Removing Object: " + nodeToRemove.getKey() + " " + nodeToRemove.getValue());
 				return value;
 			}
-			
 		} finally {
 			writeLock.unlock();
 		}
 	}
-
-
 
 	@Override
 	public void putAll(Map<? extends K, ? extends V> m) {
@@ -420,19 +589,20 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
-	public synchronized Collection<V> values() {
+	public Collection<V> values() {
 		return new AbstractCollection<V>() {
-
+			@Override
+			public int size() {
+				return myInternalMap.size();
+			}
+			@Override
+			public void clear() {
+				ExpiringMap.this.clear();
+			}
 			@Override
 			public Iterator<V> iterator() {
 				return (myInternalMap).new ValueIterator();
 			}
-
-			@Override
-			public int size() {
-				return ExpiringMap.this.size();
-			}
-
 		};
 	}
 
@@ -455,106 +625,14 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 
 	@Override 
 	public String toString() {
-	    readLock.lock();
-	    try {
+		readLock.lock();
+		try {
 			return this.myInternalMap.toString();
-	    } finally {
-	    	readLock.unlock();
+		} finally {
+			readLock.unlock();
 		}
 	}
-
-	static class EntryNode<K, V> implements Comparable<EntryNode<K, V>> {
-		/** Time this entry was last accessed */
-		long lastAccessedTime;
-		K key;
-		V value;
-
-		/** Constructor for the new ExpiringEntry Object 
-		 * 
-		 * @param key 
-		 * @param value
-		 * @param last time the entry was accessed
-		 */
-		public EntryNode(K key, V value){
-			this.key = key;
-			this.value = value;
-			this.lastAccessedTime = System.currentTimeMillis();
-		}
-
-		public EntryNode() {
-			this.lastAccessedTime = Long.MIN_VALUE;
-		}
-
-		public synchronized long getLastAccessedTime() {
-			return this.lastAccessedTime;
-		}
-
-		/** Changes the time this entry was last accessed */
-		public synchronized void setLastAccessedTime(long newTime) {
-			this.lastAccessedTime = newTime;
-		}
-
-		/** Gets the value for this entry */
-		public synchronized V getValue() {
-			return value;
-		}
-
-		/** Set the value */
-		public synchronized void setValue(V value) {
-			this.value = value;
-		}
-
-		/** Get the key for this entry 
-		 * @return */
-		public synchronized K getKey() {
-			return this.key;
-		}
-
-		@Override
-		public int compareTo(EntryNode<K, V> o) {
-			if(key.equals(o.key)) return 0;
-			if(lastAccessedTime < o.lastAccessedTime) {
-				return -1;
-			} else {
-				return 1;
-			}
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (this == obj)
-				return true;
-			if (obj == null)
-				return false;
-			if (getClass() != obj.getClass())
-				return false;
-			EntryNode<?, ?> other = (EntryNode<?, ?>) obj;
-			if (!key.equals(other.key))
-				return false;
-			if (value == null) {
-				if (other.value != null)
-					return false;
-			} else if (!value.equals(other.value))
-				return false;
-			return true;
-		}
-
-		@Override
-		public int hashCode() {
-			final int bigPrime = 51;
-			int code = 1;
-			code = bigPrime * code + ((key == null) ? 0 : key.hashCode());
-			code = bigPrime * code + ((value == null) ? 0 : value.hashCode());
-			return code;
-		}
-
-		@Override
-		public String toString() {
-			return value.toString();
-		}
-
-	}
-
+	
 	public void printMap() {
 		if(this.myInternalMap.size() == 0) System.out.println("Map empty!");
 		System.out.println("Printing Map.......");

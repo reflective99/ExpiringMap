@@ -155,7 +155,7 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 		}
 
 	}
-	
+
 	/**
 	 * This class provides the blueprints for the EntryNode Objects
 	 * These objects contain the entries as a bundle of Key and Values
@@ -169,7 +169,7 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 	 * @param <V>
 	 */
 	static class EntryNode<K, V> implements Comparable<EntryNode<K, V>> {
-		
+
 		/** Time this entry was last accessed */
 		long lastAccessedTime;
 		K key;
@@ -228,7 +228,7 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 
 		@Override
 		public boolean equals(Object obj) {
-			
+
 			if(this == obj) {
 				return true;
 			} else if (obj == null) {
@@ -236,7 +236,7 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 			} else if (this.getClass() != obj.getClass()){
 				return false;
 			}
-			
+
 			EntryNode<?, ?> other = (EntryNode<?, ?>) obj;
 			if(!this.key.equals(other.getKey())) {
 				return false;
@@ -246,7 +246,7 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 				return false;
 			}
 			return true;
-			
+
 		}
 
 		@Override
@@ -632,7 +632,7 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 			readLock.unlock();
 		}
 	}
-	
+
 	public void printMap() {
 		if(this.myInternalMap.size() == 0) System.out.println("Map empty!");
 		System.out.println("Printing Map.......");

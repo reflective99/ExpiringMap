@@ -8,14 +8,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.TreeSet;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * An expiring map is a Map in which entries 
@@ -34,17 +30,17 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 
   /**
    * 
-   * @author Asim
-   * EntryHashMap class extends the existing HashMap class
-   * It is used to internally store the Keys added to the ExpiringMap.
-   * It uses a SortedSet to keep the entries in sorted order 
-   * according to how much time has been elapsed since they were entered.
+   * EntryNodeHashMap class extends the existing HashMap class
+   * It is used to internally store the Entries added to the ExpiringMap.
+   * It also uses an internal SortedSet data structure to keep the entries
+   * in sorted order according to how much time has been elapsed since they 
+   * were entered.
    * 
    * @param <K>
    * @param <V>
    */
 
-  private static class EntryHashMap<K, V> extends HashMap<K, EntryNode<K, V>> {
+  private static class EntryNodeHashMap<K, V> extends HashMap<K, EntryNode<K, V>> {
 
     private static final long serialVersionUID = 1L;
 
@@ -92,9 +88,11 @@ public class ExpiringMap<K, V> implements Map<K, V> {
     }
 
     /** 
-     * This abstract class provides a blueprint for an Iterator Object 
-     * that can be extended by any subclasses to Iterate over both Keys
-     * and Values
+     * This AbstractIterator class provides a blueprint 
+     * for an Iterator Object for EntryNodeHashMap. 
+     * It is extended by final classes below which 
+     * can be called depending on whether we want to
+     * iterate based on EntryNodes or Values 
      */
     abstract class AbstractIterator {
 
@@ -121,12 +119,6 @@ public class ExpiringMap<K, V> implements Map<K, V> {
         return getNext().value;
       }
 
-    }
-
-    final class KeyIterator extends AbstractIterator implements Iterator<K> {
-      public final K next() {
-        return getNext().key;
-      }
     }
 
     final class EntryNodeIterator extends AbstractIterator implements Iterator<Map.Entry<K, V>> {
@@ -157,13 +149,10 @@ public class ExpiringMap<K, V> implements Map<K, V> {
   }
 
   /**
-   * This class provides the blueprints for the EntryNode Objects
-   * These objects contain the entries as a bundle of Key and Values
-   * entered into the ExpiringMap. The keys in the internalMap map
-   * to these EntryNodes. They also keep track of the time that 
-   * an entry was accessed last.
-   * 
-   * @author Asim
+   * The EntryNode class provides a blueprint for Entry Objects 
+   * residing in the Internal EntryNodeHashMap. This class wraps
+   * the keys and value tuples entered into the ExpiringMap and 
+   * also keeps track of the time that an entry was accessed last.
    * 
    * @param <K>
    * @param <V>
@@ -179,7 +168,6 @@ public class ExpiringMap<K, V> implements Map<K, V> {
      * 
      * @param key 
      * @param value
-     * @param last time the entry was accessed
      */
     public EntryNode(K key, V value){
       this.key = key;
@@ -218,8 +206,8 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 
     @Override
     public int compareTo(EntryNode<K, V> o) {
-      if(key.equals(o.key)) return 0;
-      if(lastAccessedTime < o.lastAccessedTime) {
+      if(this.key.equals(o.getKey())) return 0;
+      if(this.lastAccessedTime < o.getLastAccessedTime()) {
         return -1;
       } else {
         return 1;
@@ -274,25 +262,24 @@ public class ExpiringMap<K, V> implements Map<K, V> {
   /** Time To Live for each each Entry as specified by the User */
   private long myTimeToLiveInMillis;
 
-  /** The internal EntryHashMap that keeps track of all the entries contained in the ExpiringMap so far*/
-  EntryHashMap<K, V> myInternalMap;
-
-  /** */
-  private Thread evictorThread = null;
+  /** The internal EntryNodeHashMap that keeps track of all the entries contained in the ExpiringMap so far*/
+  EntryNodeHashMap<K, V> myInternalMap;
+  
+  /** garbageCollectorThread Thread that will wake up and run to evict expired entries */
+  @SuppressWarnings("unused")
+  private GarbageCollector garbageCollectorThread = null;
 
   /**
-   * Constructor for Expiring Map which creates a new Evictor thread 
-   * @param timeToLiveInMillis
+   * Constructor for Expiring Map which creates a new GarbageCollector thread 
+   * @param timeToLiveInMillis - takes in the time an entry is supposed to live for
    * @throws NullPointerException
    */
 
-  private class Evictor extends Thread {
-
+  private class GarbageCollector extends Thread {
+    
     private long timeToLive;
 
-    private final Logger LOGGER = LoggerFactory.getLogger(Evictor.class);
-
-    Evictor(long ttl){
+    GarbageCollector(long ttl){
       this.timeToLive = ttl;
     }
 
@@ -301,12 +288,9 @@ public class ExpiringMap<K, V> implements Map<K, V> {
       boolean run = true;
       while(run) {
         try {
-          LOGGER.debug("Evictor sleeping...");
           Thread.sleep(timeToLive);
           evictEntries();
-          LOGGER.debug("Awake and Evicting!");
         } catch (InterruptedException e) {
-          LOGGER.error("Exception", e);
           run = false;
         }
       }
@@ -321,7 +305,7 @@ public class ExpiringMap<K, V> implements Map<K, V> {
     }
 
     this.myTimeToLiveInMillis = timeToLiveInMillis;
-    this.myInternalMap = new EntryHashMap<K, V>();
+    this.myInternalMap = new EntryNodeHashMap<K, V>();
     /** Run a new thread to clean up the entries which have expired */
     if(this.myTimeToLiveInMillis > 0) {
 
@@ -335,7 +319,7 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 					evictEntries();
 				}
 			}, this.myTimeToLiveInMillis, this.myTimeToLiveInMillis);
-			Thread evictor = new Thread(new Runnable() {
+			Thread GarbageCollector = new Thread(new Runnable() {
 				@Override
 				public void run() {
 					while(true) {
@@ -348,23 +332,23 @@ public class ExpiringMap<K, V> implements Map<K, V> {
 					}
 				}
 			});
-			evictor.setDaemon(true);
-			evictor.start();
+			GarbageCollector.setDaemon(true);
+			GarbageCollector.start();
        */
     }
   }
 
   /**
-   * This method initializes the Evictor Thread
+   * This method initializes the GarbageCollector Thread
    */
   private void intitialize() {
-    new Evictor(this.myTimeToLiveInMillis).start();
+    new GarbageCollector(this.myTimeToLiveInMillis).start();
   }
 
   /**
    * This functions evicts the expired entries from the 
    * internal map. It is called at regular intervals 
-   * by the evictor thread as specified by the 
+   * by the GarbageCollector thread as specified by the 
    * time to live in milliseconds provided by the User.
    */
   private void evictEntries() {
@@ -375,7 +359,7 @@ public class ExpiringMap<K, V> implements Map<K, V> {
     try {
       List<K> keys = new ArrayList<K>();
       for(EntryNode<K, V> node : myInternalMap.sortedSet) {
-        if(System.currentTimeMillis() - node.lastAccessedTime > this.myTimeToLiveInMillis) {
+        if(System.currentTimeMillis() - node.getLastAccessedTime() > this.myTimeToLiveInMillis) {
           keys.add(node.getKey());
         }
       }
@@ -632,7 +616,7 @@ public class ExpiringMap<K, V> implements Map<K, V> {
       readLock.unlock();
     }
   }
-
+  
   public void printMap() {
     if(this.myInternalMap.size() == 0) System.out.println("Map empty!");
     System.out.println("Printing Map.......");

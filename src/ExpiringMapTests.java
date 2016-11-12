@@ -14,7 +14,6 @@ import org.junit.Test;
 
 public class ExpiringMapTests {
 
-
   @Test (expected = IllegalArgumentException.class)
   public void shouldThrowExceptionForInvalidTTLs() {
     new ExpiringMap<String, String>(-23);
@@ -24,7 +23,6 @@ public class ExpiringMapTests {
   public void shouldGetAndPutValues() {
 
     ExpiringMap<String, String> map = new ExpiringMap<String, String>(100000);
-
     map.put("apple", "good");
     map.put("pineapple", "great");
     map.put("papaya", "meh");
